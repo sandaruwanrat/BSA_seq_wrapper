@@ -34,7 +34,7 @@ parser.add_argument('-o', '--output', default=f"output_{datestring}",
                     help="Name of the directory to store output files (default: 'output_CURRENTTIME')")
 parser.add_argument('-n', '--numberOfCHSites', type=int, default=5,
                     help="Minimum number of CH sites for mCH level filter (default: 5).")
-parser.add_argument('-t', '--threshold', type=float, default=95,
+parser.add_argument('-t', '--threshold', type=float, default=0.95,
                     help="Threshold of mCH percentage to filter reads (e.g., 96.78 filters >96.78%% CH sites). Use 101 to disable (default: 95).")
 parser.add_argument('-p', '--processors', type=int, default=2,
                     help="Number of processors for methylpy (default: 2).")
@@ -112,12 +112,7 @@ def write_log(fh, msg: str, verbose=True):
     
 # --- Setup Functions ---
 def initialize_output_files(outdir: Path):
-    """
-    Prepare empty results tables
-    ----------
-    outdir: Path
-        
-    """
+    """Prepare empty results tables"""
     out_mat_file = outdir / "output_matrix.txt"
     with open(out_mat_file, "w") as fh:
         print("amplicon\tcontext\tpercentage\tsites\treads\tstrand", file=fh)
@@ -179,9 +174,6 @@ def remove_bam(fh_log, bamfile_pth: Path):
     return True
 
 
-#add a function to 
-
-
 # methylpy Commands
 def run_build_reference(name_fasta, fasta_file, dir_ref_pth, num_proc, fh_log, verbose=True):
     cmd_BI = [
@@ -219,8 +211,6 @@ def run_single_end_pipeline(name_sample,bam_path, fastq_path, fwd_ref_file, rv_r
         f"--reverse-ref {rv_ref_file} "
         f"--ref-fasta {ref_fasta_pth} "
         f"--num-procs {num_proc} "
-        f"--unmethylated-control TyrAT "
-        f"--binom-test True "
         f"--min-cov 3 "
         f"--remove-chr-prefix False "
         f"--pbat False "
@@ -262,22 +252,6 @@ def run_single_end_pipeline(name_sample,bam_path, fastq_path, fwd_ref_file, rv_r
 
     return True
 
-
-#Filtering process
-		if($reRun ne 'methCalculate' && $reRun ne 'coverage'){
-			$cmd = "cp $dir_out"."$name_sample"."_processed_reads.bam $dir_out"."unfiltered_"."$name_sample"."_processed_reads.bam"; print $fh4 "\t$cmd\n"; `$cmd`;
-			$cmd = "rm $dir_out"."$name_sample"."_processed_reads.bam"; print $fh4 "\t$cmd\n"; `$cmd`;
-			$cmd = "rm $dir_out"."$name_sample"."_processed_reads.bam.bai";	print $fh4 "\t$cmd\n"; `$cmd`;
-			print $fh4 "\tFiltering highly methylated reads\n";
-			if($verbose){print STDERR "\tFiltering highly methylated reads\n";}
-			$cmd = "methylpy bam-quality-filter --input-file $dir_out"."unfiltered_"."$name_sample"."_processed_reads.bam --output-file $dir_out"."$name_sample"."_processed_reads --ref-fasta $dir_ref"."$name_fasta.fa --min-num-ch $siteCH --max-mch-level $filT &> $dir_out"."stats_filtering_"."$name_sample";
-			print $fh4 "\t$cmd\n";
-			`$cmd`;
-			print $fh4 "\tFinished filtering reads for $name_sample\n";
-			if($verbose){print STDERR "\tFinished filtering reads for $name_sample\n";}
-		}
-
-
 def bqf_fn(name_sample,bam_path,filtered_bam_path, fasta_file,siteCH ,filT, filtering_er_path,
                             fh_log, verbose=True):
     
@@ -314,7 +288,7 @@ def bqf_fn(name_sample,bam_path,filtered_bam_path, fasta_file,siteCH ,filT, filt
 #methylation calling function
 
 def call_methylation_state(name_sample,filtered_bam,
-                            ref_fasta_pth, num_proc, dir_out_pth, mpy_status_path,
+                            ref_fasta_pth, num_proc, dir_out_pth, cms_er_path,
                             fh_log, verbose=True):
     """Function to run methylation calling"""
     
@@ -328,8 +302,7 @@ def call_methylation_state(name_sample,filtered_bam,
         f"--sample {name_sample} "
         f"--ref-fasta {ref_fasta_pth} "
         f"--num-procs {num_proc} "
-        f"--unmethylated-control TyrAT "
-        f"--binom-test TRUE --min-cov 3 "
+        f"--min-cov 3 "
         f"--remove-chr-prefix FALSE "
         f"--compress-output FALSE --paired-end FALSE "
         f"--path-to-output {dir_out_pth} "
@@ -338,8 +311,8 @@ def call_methylation_state(name_sample,filtered_bam,
     print(f"\t{cmd_CMS}", file=fh_log)
     
     
-    with open(mpy_status_path, "w") as mpy_status_file:
-            result_CMS = subprocess.run(cmd_CMS, shell=True, stdout=mpy_status_file, stderr=subprocess.STDOUT)
+    with open(cms_er_path, "w") as cms_er_file:
+            result_CMS = subprocess.run(cmd_CMS, shell=True, stdout=cms_er_file, stderr=subprocess.STDOUT)
     
     
     if result_CMS.returncode != 0:
@@ -399,9 +372,7 @@ def cal_cytosine_cov(bed_file,ref_fasta,fh_log,verbose=True):
 
 
 def process_strand(allc_file, bed_file, strand, name_bed, name_sample, fh_log):
-    """Process methylation contexts for one strand and return stats list
-       Process allC files 
-    """
+    """Process methylation contexts for one strand and return stats list."""
     
     contexts = ['CG[ATCG]', 'C[ATC]G', 'C[ATC][ATC]']
     context_names = ['CG', 'CHG', 'CHH']
@@ -432,10 +403,7 @@ def process_strand(allc_file, bed_file, strand, name_bed, name_sample, fh_log):
 
 def cal_cov_stats(fasta_file,name_sample,dir_ref_pth,dir_out_pth,fh_log,verbose=True):
     
-    """runner for one sample and reference.
-    
-    
-    """
+    """runner for one sample and reference."""
     #fasta_file = f"{dir_ref}{name_fasta}.fa"
     if not check_reference(fasta_file, fh_log):
         return
@@ -456,7 +424,6 @@ def cal_cov_stats(fasta_file,name_sample,dir_ref_pth,dir_out_pth,fh_log,verbose=
             print(f"Warning: BED file not found: {bed_file}", file=sys.stderr)
             raise RuntimeError(f"bedfile file {bed_file} not found for {name_sample}")
         
-        #proccess allC files
         plus_total_c, minus_total_c = cal_cytosine_cov(ref_fasta=fasta_file, bed_file=bed_file,fh_log= fh_log)
         
         # process both strands
@@ -469,7 +436,7 @@ def cal_cov_stats(fasta_file,name_sample,dir_ref_pth,dir_out_pth,fh_log,verbose=
                 print(line, file=fh_matrix)
         
         
-         # coverage stats (simple sums)
+        # coverage stats (simple sums)
         plus_reported_c = sum(int(l.split("\t")[3]) for l in plus_outs if l.split("\t")[3].isdigit())
         plus_total_r = sum(int(l.split("\t")[4]) for l in plus_outs if l.split("\t")[4].isdigit())
         minus_reported_c = sum(int(l.split("\t")[3]) for l in minus_outs if l.split("\t")[3].isdigit())
@@ -481,8 +448,6 @@ def cal_cov_stats(fasta_file,name_sample,dir_ref_pth,dir_out_pth,fh_log,verbose=
         minus_cov = f"{minus_total_r / minus_reported_c:.2f}" if minus_reported_c > 0 else "0.00"
 
         amplicon_name = f"{name_bed}_{name_sample}"
-        
-        
         with open(os.path.join(dir_out, "stats_coverage.txt"), "a") as fh_stats:
             print(f"{amplicon_name}\tplus\t{plus_total_c}\t{plus_reported_c}\t{plus_per_c}\t{plus_total_r}\t{plus_cov}", file=fh_stats)
             print(f"{amplicon_name}\tminus\t{minus_total_c}\t{minus_reported_c}\t{minus_per_c}\t{minus_total_r}\t{minus_cov}", file=fh_stats)
@@ -530,72 +495,9 @@ def cal_cov_stats(fasta_file,name_sample,dir_ref_pth,dir_out_pth,fh_log,verbose=
 #         print(f"{amplicon_name}\tplus\t{plus_total_c}\t{plus_reported_c}\t{plus_per_c}\t{plus_total_r}\t{plus_cov}", file=fh_stats)
 #         print(f"{amplicon_name}\tminus\t{minus_total_c}\t{minus_reported_c}\t{minus_per_c}\t{minus_total_r}\t{minus_cov}", file=fh_stats)
 
+                                             
 
 
-def process_conversion_stats(name_sample, dir_out, fh_log, verbose=False):
-    """
-     conversion statistics for a given sample
-    
-    """
-    
-    
-    percent = 0
-    stats_file = os.path.join(dir_out, f"stats_{name_sample}.txt")
-    
-    if os.path.exists(stats_file):
-        try:
-            with open(stats_file, 'r') as fh3:
-                for line3 in fh3:
-                    match = re.search(r'The non-conversion rate is (\S+)%', line3)
-                    if match:
-                        percent = f"{100 - float(match.group(1)):.2f}"
-                        break
-        except (FileNotFoundError, ValueError) as e:
-            print(f"Warning: Could not process stats file {stats_file}: {e}", file=sys.stderr)
-    
-    # Append result to stats_conversion.txt
-    conv_file = os.path.join(dir_out, "stats_conversion.txt")
-    with open(conv_file, 'a') as fh2:
-        print(f"{name_sample}\t{percent}", file=fh2)
-    
-    # Log completion
-    print(f"Completed processing {name_sample}", file=fh_log)
-    if verbose:
-        print(f"Completed processing {name_sample}", file=sys.stderr)
-                                            
-
-
-def process_conversion_stats(name_sample, dir_out):
-    """
-    Parse methylpy stats_<sample>.txt file and append conversion rate
-    to stats_conversion.txt in the same directory.
-    """
-    percent = 0.0
-    stats_file = os.path.join(dir_out, f"stats_{name_sample}.txt")
-    conv_file = os.path.join(dir_out, "stats_conversion.txt")
-
-    # Check if stats file exists
-    if not os.path.exists(stats_file):
-        print(f"Warning: Cannot open file for reading: {stats_file}", file=sys.stderr)
-        with open(conv_file, 'a') as fh2:
-            print(f"{name_sample}\tN/A", file=fh2)
-        return
-
-    try:
-        with open(stats_file, 'r') as fh3:
-            for line in fh3:
-                match = re.search(r'The non-conversion rate is (\S+)%', line)
-                if match:
-                    percent = round(100 - float(match.group(1)), 2)
-                    break
-    except Exception as e:
-        print(f"Error reading {stats_file}: {e}", file=sys.stderr)
-
-    with open(conv_file, 'a') as fh2:
-        if percent == 0:
-            print(f"{name_sample}\tN/A", file=fh2)
-        else:
-            print(f"{name_sample}\t{percent:.2f}", file=fh2)
 
 
     
@@ -629,7 +531,7 @@ def main():
     index_file = None
     bam_file = None
 
-    # directory paths
+    # Normalize directory paths
     dir_out_pth = Path(dir_out).resolve()
     print("output path: {}".format(dir_out_pth))
     dir_ref_pth = Path(dir_ref).resolve()
@@ -649,7 +551,7 @@ def main():
         dir_out_pth.mkdir(parents=True, exist_ok=True)
         
         
-     # Initialize logfiles
+    # Initialize logfiles
     datestring_log = datetime.now().strftime("%I:%M:%S")
     
     log_file = Path(dir_out_pth) / "amplicon_seq.log"
@@ -725,11 +627,11 @@ def main():
                     fastq_path = Path(dir_reads_pth) / f"{name_sample}.fastq.gz"
                     print("fastq file: {}".format(fastq_path))
                     
-                    #stats_path = Path(dir_out_pth) / f"stats_{name_sample}.txt"
-                    #print("stat file: {}".format(stats_path))
+                    stats_path = Path(dir_out_pth) / f"stats_{name_sample}.txt"
+                    print("stat file: {}".format(stats_path))
                     
-                    mpy_status_path = Path(dir_out_pth) / f"mpy_status_{name_sample}.txt"
-                    print("stat file: {}".format(mpy_status_path))
+                    mpy_er_path = Path(dir_out_pth) / f"mpy_er_{name_sample}.txt"
+                    print("stat file: {}".format(mpy_er_path))
                     
                     fwd_ref_file = Path(dir_ref_pth) / f"{name_fasta}_methylpy_f"
                     print("fwd_ref_file: {}".format(fwd_ref_file))
@@ -754,7 +656,7 @@ def main():
                             f"{name_fasta}.fa"
                         )
                         run_single_end_pipeline(name_sample,bam_path, fastq_path, fwd_ref_file, rv_ref_file,
-                            ref_fasta_pth, num_proc, dir_out_pth, mpy_status_path,
+                            ref_fasta_pth, num_proc, dir_out_pth, mpy_er_path,
                             fh_log, verbose=False)
                         if verbose:
                             print(log_msg, file=sys.stderr)
@@ -784,7 +686,7 @@ def main():
                     
                     
                     # Remove original BAM and index
-                    remove_bam(fh_log,bam_path)
+                    #remove_bam(fh_log,bam_path)
                     
                     # Call methylation
                     filtered_bam = Path(dir_out_pth) / f"{name_sample}_filtered_reads.bam"
