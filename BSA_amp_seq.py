@@ -8,7 +8,10 @@ import re
 from datetime import datetime
 from pathlib import Path
 import time
-
+import pandas as pd
+import seaborn as sns
+from statsmodels.stats.proportion import proportion_confint
+import matplotlib as plt
 
 
 
@@ -458,49 +461,129 @@ def cal_cov_stats(fasta_file,name_sample,dir_ref_pth,dir_out_pth,fh_log,verbose=
 
 
 
-# def process_amplicon(name_bed, name_sample, fasta_file, bed_file, allc_file, dir_out, fh_log):
-#     """Process one amplicon: count cytosines, process strands, and save results."""
-#     if not os.path.exists(bed_file):
-#         print(f"Warning: BED file not found: {bed_file}", file=sys.stderr)
-#         return
 
-#     if not os.path.exists(allc_file):
-#         print(f"Warning: allc file not found: {allc_file}", file=sys.stderr)
-#         return
+def get_amplicon_list(ref_dir: Path):
+    amplicon_list = []
 
-#     plus_total_c, minus_total_c = count_cytosines(fasta_file, bed_file, fh_log)
+    # iterate over all fasta files in directory
+    for fa_file in Path(ref_dir).glob("*.fasta"):
+        with open(fa_file, 'r') as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith(">"):
+                    match = re.match(r'^>(\S+)', line)
+                    if match:
+                        amplicon_list.append(match.group(1))
 
-#     # process both strands
-#     plus_outs = process_strand(allc_file, bed_file, "+", name_bed, name_sample, fh_log)
-#     minus_outs = process_strand(allc_file, bed_file, "-", name_bed, name_sample, fh_log)
+    # remove duplicates while preserving order
+    seen = set()
+    unq_amplicons = [x for x in amplicon_list if not (x in seen or seen.add(x))]
 
-#     # write output_matrix
-#     with open(os.path.join(dir_out, "output_matrix.txt"), "a") as fh_matrix:
-#         for line in plus_outs + minus_outs:
-#             print(line, file=fh_matrix)
-
-#     # coverage stats (simple sums)
-#     plus_reported_c = sum(int(l.split("\t")[3]) for l in plus_outs if l.split("\t")[3].isdigit())
-#     plus_total_r = sum(int(l.split("\t")[4]) for l in plus_outs if l.split("\t")[4].isdigit())
-#     minus_reported_c = sum(int(l.split("\t")[3]) for l in minus_outs if l.split("\t")[3].isdigit())
-#     minus_total_r = sum(int(l.split("\t")[4]) for l in minus_outs if l.split("\t")[4].isdigit())
-
-#     plus_per_c = f"{plus_reported_c * 100 / plus_total_c:.2f}" if plus_total_c > 0 else "0.00"
-#     plus_cov = f"{plus_total_r / plus_reported_c:.2f}" if plus_reported_c > 0 else "0.00"
-#     minus_per_c = f"{minus_reported_c * 100 / minus_total_c:.2f}" if minus_total_c > 0 else "0.00"
-#     minus_cov = f"{minus_total_r / minus_reported_c:.2f}" if minus_reported_c > 0 else "0.00"
-
-#     amplicon_name = f"{name_bed}_{name_sample}"
-#     with open(os.path.join(dir_out, "stats_coverage.txt"), "a") as fh_stats:
-#         print(f"{amplicon_name}\tplus\t{plus_total_c}\t{plus_reported_c}\t{plus_per_c}\t{plus_total_r}\t{plus_cov}", file=fh_stats)
-#         print(f"{amplicon_name}\tminus\t{minus_total_c}\t{minus_reported_c}\t{minus_per_c}\t{minus_total_r}\t{minus_cov}", file=fh_stats)
-
-                                             
+    return unq_amplicons
 
 
-
-
+def cal_wilson_CI(dir_out_pth: Path):
     
+    out_mat_file_pth=os.path.join(dir_out_pth, "output_matrix.txt")
+    
+    mat_df=pd.read_csv(out_mat_file_pth,header=0,sep='\t')
+    
+    mat_df.rename(columns = {"reads": "totalC"}, 
+            inplace = True)
+    mat_df.loc[:,'Per']=mat_df["percentage"]*100
+    df_filtered = mat_df[mat_df["strand"] == "+"].copy()
+    df_filtered.loc[:,"count"] = (df_filtered["Per"] / 100) * df_filtered["totalC"]
+    # Compute Wilson 95% CI
+    lower, upper = proportion_confint(
+        count=df_filtered['count'],
+        nobs=df_filtered['totalC'],
+        alpha=0.05,
+        method='wilson'
+    )
+
+    # Add to DataFrame
+    df_filtered['lower'] = lower * 100
+    df_filtered['upper'] = upper * 100
+
+    # Compute offsets (for error bars)
+    df_filtered['plus'] = df_filtered['upper'] - df_filtered['Per']
+    df_filtered['minus'] = df_filtered['Per'] - df_filtered['lower']
+    
+    
+    return df_filtered
+
+def plot_amplicon(ref_dir: Path, plot_out_path,dir_out_pth:Path):
+    """
+    Generate bar plots for each unique amplicon and save as PDF.
+
+    Parameters
+    ----------
+    ref_dir : Path
+        Directory containing reference fasta
+    plot_out_path : Path
+        Directory where PDF plots will be saved
+    
+    """
+    #cal CI for output
+    plot_df=cal_wilson_CI(dir_out_pth)
+    plot_df.loc[:,["Amp"]] =  plot_df["amplicon"].str.rsplit("_", n=1, expand=True)[0]
+    plot_df.loc[:,["Smp"]] =  plot_df["amplicon"].str.rsplit("_", n=1, expand=True)[1]
+    
+    #get the unique amplicons from fasta headers
+    unique_amps = get_amplicon_list(ref_dir)
+    palette = ["#EE3624", "#42A9DF", "#00A850"]
+
+    plot_out_path = Path(plot_out_path)
+    plot_out_path.mkdir(parents=True, exist_ok=True)
+
+    for amp in unique_amps:
+        # Subset data by amplicon
+        subset =  plot_df[plot_df["Amp"] == amp]
+
+        plt.figure(figsize=(10, 6))
+        sns.barplot(
+            data=subset,
+            x="amplicon",
+            y="Per",
+            hue="context",
+            palette=palette,
+            errorbar=None
+        )
+
+        # Add error bars manually (Per ± plus/minus)
+        for i, (name, group) in enumerate(test_df.groupby("context")):
+            # Calculate x positions for grouped bars
+            x_positions = range(len(group))
+            offsets = [-0.27, 0, 0.27]  # adjust spacing manually for clarity if needed
+            plt.errorbar(
+                x=[x + offsets[i] for x in range(len(group))],
+                y=group["Per"],
+                yerr=[group["minus"], group["plus"]],
+                fmt="none",
+                capsize=4,
+                color="black",
+                elinewidth=1,
+            )
+
+        # Add horizontal line (y = 0)
+        plt.axhline(0, color="black", linewidth=1)
+            
+        plt.ylim(0, 100)
+        plt.ylabel("Percentage")
+        plt.xlabel(f"Amplicon : {amp}")
+        plt.axhline(0, color="black", linewidth=1)
+        plt.xticks(rotation=90, ha="center")
+        plt.legend(title="Context")
+
+        plt.tight_layout()
+
+        # Save to PDF (one file per amplicon)
+        pdf_path = plot_out_path / f"{amp}_tt.pdf"
+        plt.savefig(pdf_path, format="pdf", bbox_inches="tight")
+
+        plt.close()  
+
+    return True
 
 
 
