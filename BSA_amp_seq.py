@@ -551,7 +551,7 @@ def plot_amplicon(ref_dir: Path,dir_out_pth:Path):
         )
 
         # Add error bars manually (Per ± plus/minus)
-        for i, (name, group) in enumerate(test_df.groupby("context")):
+        for i, (name, group) in enumerate(subset.groupby("context")):
             # Calculate x positions for grouped bars
             x_positions = range(len(group))
             offsets = [-0.27, 0, 0.27]  # adjust spacing manually for clarity if needed
