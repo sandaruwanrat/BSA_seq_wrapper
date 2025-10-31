@@ -533,7 +533,7 @@ def plot_amplicon(ref_dir: Path,dir_out_pth:Path):
     unique_amps = get_amplicon_list(ref_dir)
     palette = ["#EE3624", "#42A9DF", "#00A850"]
 
-    plot_out_path = Path(plot_out_path)
+    plot_out_path = Path(dir_out_pth)
     plot_out_path.mkdir(parents=True, exist_ok=True)
 
     for amp in unique_amps:
