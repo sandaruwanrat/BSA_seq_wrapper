@@ -512,7 +512,7 @@ def cal_wilson_CI(dir_out_pth: Path):
     
     return df_filtered
 
-def plot_amplicon(ref_dir: Path, plot_out_path,dir_out_pth:Path):
+def plot_amplicon(ref_dir: Path,dir_out_pth:Path):
     """
     Generate bar plots for each unique amplicon and save as PDF.
 
@@ -578,7 +578,7 @@ def plot_amplicon(ref_dir: Path, plot_out_path,dir_out_pth:Path):
         plt.tight_layout()
 
         # Save to PDF (one file per amplicon)
-        pdf_path = plot_out_path / f"{amp}_tt.pdf"
+        pdf_path = dir_out_pth / f"{amp}_plot.pdf"
         plt.savefig(pdf_path, format="pdf", bbox_inches="tight")
 
         plt.close()  
@@ -806,6 +806,16 @@ def main():
             print(f"[ERROR] Could not read {master_file}: {e}", file=fh_log)
             sys.exit(1)
 
+        
+        #should be change to a seperate option
+        #need to allow users to order the samples
+        #plotting
+        print("\tPLotting output matix results", file=fh_log)
+        if verbose:
+            print("\tCalculating methylation percentage, coverage and statistics", file=sys.stderr)
+        
+        plot_amplicon(ref_dir=dir_ref_pth,dir_out_pth=dir_out_pth)
+        
         # Log completion
         completion_msg = "Analysis pipeline completed successfully!"
         print(completion_msg, file=fh_log)
