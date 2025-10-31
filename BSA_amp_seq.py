@@ -810,9 +810,9 @@ def main():
         #should be change to a seperate option
         #need to allow users to order the samples
         #plotting
-        print("\tPLotting output matix results", file=fh_log)
+        print("\tPlotting output matix results", file=fh_log)
         if verbose:
-            print("\tCalculating methylation percentage, coverage and statistics", file=sys.stderr)
+            print("\tPlotting output matix results", file=sys.stderr)
         
         plot_amplicon(ref_dir=dir_ref_pth,dir_out_pth=dir_out_pth)
         
