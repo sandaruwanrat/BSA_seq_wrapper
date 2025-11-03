@@ -11,27 +11,29 @@ import time
 import pandas as pd
 import seaborn as sns
 from statsmodels.stats.proportion import proportion_confint
-import matplotlib as plt
+import matplotlib
+import matplotlib.pyplot as plt
 
+# ===========================================================
 
-
-# Define timestamp for output folder
+# ====================================== Define timestamp for output folder ======================================
 datestring = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 
 
 
-# input argument parser setup
+# ====================================== input argument parser setup ======================================
 parser = argparse.ArgumentParser(
     description="Analyze Bisulfite Amplicon sequencing reads - map reads using methylpy, generate allC files, count methylation percentage, coverage,stats and plots data",
     formatter_class=argparse.RawDescriptionHelpFormatter
 )
 
-# arguments for default mode
+# ====================================== arguments for default mode ======================================
 parser.add_argument('-S', '--sequences', default="", help="Directory containing the sequencing reads files (e.g., /cluster/pixstor/slotkinr-lab/sandaruwan/BSA_round18/KS-SAE-Amplicon-R18).")
 parser.add_argument('-F', '--files', default="", help="Directory containing the Reference files (e.g., ~/BSA_round18/REF_Files/).")
 parser.add_argument('-M', '--master', default="", help="Master file containing the sample names and the reference fasta file names.")
 
-# optional arguments
+# ====================================== optional arguments ======================================
+
 
 parser.add_argument('-o', '--output', default=f"output_{datestring}",
                     help="Name of the directory to store output files (default: 'output_CURRENTTIME')")
@@ -88,6 +90,9 @@ Required Inputs (default mode OR Re-Run mode):
 """)
     sys.exit(1)
 
+#_______________________________________________________________________
+# ===================== Functions ======================================
+#_______________________________________________________________________
 
 def timestamp_fn():
     return datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
@@ -113,7 +118,7 @@ def write_log(fh, msg: str, verbose=True):
     if verbose:
         print(msg, file=sys.stderr)
     
-# --- Setup Functions ---
+# ====================================== Setup Function ======================================
 def initialize_output_files(outdir: Path):
     """Prepare empty results tables"""
     out_mat_file = outdir / "output_matrix.txt"
@@ -129,6 +134,7 @@ def initialize_output_files(outdir: Path):
         print("amplicon\tstrand\t#totalCytosines\t#reportedCytosines\t%reportedCytosines\ttotalReads\tcoverage", file=fh)
 
 
+# ====================================== parse master file============================
 def parse_master(master_file: str):
     """Yield (sample, fasta) from master file"""
     with open(master_file, "r") as fh:
@@ -141,20 +147,7 @@ def parse_master(master_file: str):
                 yield match.group(1), match.group(2)
 
 
-# def remove_bam(fh_log,bamfile_pth:Path):
-#     """Remove unfiltered bamfiles"""
-#     rm_bm_cmd = f"rm {bamfile_pth}"
-#     print(f"\t{rm_bm_cmd}", file=fh_log)
-#     subprocess.run(rm_bm_cmd, shell=True)
-    
-#     bam_index = f"{bamfile_pth}.bai"
-#     if os.path.exists(bam_index):
-#         rm_ind_cmd = f"rm {bam_index}"
-#         print(f"\t{rm_ind_cmd}", file=fh_log)
-#         subprocess.run(rm_ind_cmd, shell=True)
-        
-#     return True
-
+# ====================================== remove unfiltered bam file============================
 def remove_bam(fh_log, bamfile_pth: Path):
     """Remove BAM file and its index if they exist."""
     if not bamfile_pth.exists():
@@ -176,8 +169,8 @@ def remove_bam(fh_log, bamfile_pth: Path):
 
     return True
 
-
-# methylpy Commands
+#>>>>>>>>>>>>>>>>> methylpy Commands <<<<<<<<<<<<<<<<<<<<<<<<<<<
+#================================ build index============================
 def run_build_reference(name_fasta, fasta_file, dir_ref_pth, num_proc, fh_log, verbose=True):
     cmd_BI = [
         "methylpy", "build-reference",
@@ -255,6 +248,8 @@ def run_single_end_pipeline(name_sample,bam_path, fastq_path, fwd_ref_file, rv_r
 
     return True
 
+
+#bam qulaity filter
 def bqf_fn(name_sample,bam_path,filtered_bam_path, fasta_file,siteCH ,filT, filtering_er_path,
                             fh_log, verbose=True):
     
@@ -288,8 +283,8 @@ def bqf_fn(name_sample,bam_path,filtered_bam_path, fasta_file,siteCH ,filT, filt
     
     return True
 
-#methylation calling function
 
+#methylation calling 
 def call_methylation_state(name_sample,filtered_bam,
                             ref_fasta_pth, num_proc, dir_out_pth, cms_er_path,
                             fh_log, verbose=True):
@@ -460,130 +455,6 @@ def cal_cov_stats(fasta_file,name_sample,dir_ref_pth,dir_out_pth,fh_log,verbose=
     return True
 
 
-
-
-def get_amplicon_list(ref_dir: Path):
-    amplicon_list = []
-
-    # iterate over all fasta files in directory
-    for fa_file in Path(ref_dir).glob("*.fasta"):
-        with open(fa_file, 'r') as fh:
-            for line in fh:
-                line = line.strip()
-                if line.startswith(">"):
-                    match = re.match(r'^>(\S+)', line)
-                    if match:
-                        amplicon_list.append(match.group(1))
-
-    # remove duplicates while preserving order
-    seen = set()
-    unq_amplicons = [x for x in amplicon_list if not (x in seen or seen.add(x))]
-
-    return unq_amplicons
-
-
-def cal_wilson_CI(dir_out_pth: Path):
-    
-    out_mat_file_pth=os.path.join(dir_out_pth, "output_matrix.txt")
-    
-    mat_df=pd.read_csv(out_mat_file_pth,header=0,sep='\t')
-    
-    mat_df.rename(columns = {"reads": "totalC"}, 
-            inplace = True)
-    mat_df.loc[:,'Per']=mat_df["percentage"]*100
-    df_filtered = mat_df[mat_df["strand"] == "+"].copy()
-    df_filtered.loc[:,"count"] = (df_filtered["Per"] / 100) * df_filtered["totalC"]
-    # Compute Wilson 95% CI
-    lower, upper = proportion_confint(
-        count=df_filtered['count'],
-        nobs=df_filtered['totalC'],
-        alpha=0.05,
-        method='wilson'
-    )
-
-    # Add to DataFrame
-    df_filtered['lower'] = lower * 100
-    df_filtered['upper'] = upper * 100
-
-    # Compute offsets (for error bars)
-    df_filtered['plus'] = df_filtered['upper'] - df_filtered['Per']
-    df_filtered['minus'] = df_filtered['Per'] - df_filtered['lower']
-    
-    
-    return df_filtered
-
-def plot_amplicon(ref_dir: Path,dir_out_pth:Path):
-    """
-    Generate bar plots for each unique amplicon and save as PDF.
-
-    Parameters
-    ----------
-    ref_dir : Path
-        Directory containing reference fasta
-    plot_out_path : Path
-        Directory where PDF plots will be saved
-    
-    """
-    #cal CI for output
-    plot_df=cal_wilson_CI(dir_out_pth)
-    plot_df.loc[:,["Amp"]] =  plot_df["amplicon"].str.rsplit("_", n=1, expand=True)[0]
-    plot_df.loc[:,["Smp"]] =  plot_df["amplicon"].str.rsplit("_", n=1, expand=True)[1]
-    
-    #get the unique amplicons from fasta headers
-    unique_amps = get_amplicon_list(ref_dir)
-    palette = ["#EE3624", "#42A9DF", "#00A850"]
-
-    plot_out_path = Path(dir_out_pth)
-    plot_out_path.mkdir(parents=True, exist_ok=True)
-
-    for amp in unique_amps:
-        # Subset data by amplicon
-        subset =  plot_df[plot_df["Amp"] == amp]
-
-        plt.figure(figsize=(10, 6))
-        sns.barplot(
-            data=subset,
-            x="amplicon",
-            y="Per",
-            hue="context",
-            palette=palette,
-            errorbar=None
-        )
-
-        # Add error bars manually (Per ± plus/minus)
-        for i, (name, group) in enumerate(subset.groupby("context")):
-            # Calculate x positions for grouped bars
-            x_positions = range(len(group))
-            offsets = [-0.27, 0, 0.27]  # adjust spacing manually for clarity if needed
-            plt.errorbar(
-                x=[x + offsets[i] for x in range(len(group))],
-                y=group["Per"],
-                yerr=[group["minus"], group["plus"]],
-                fmt="none",
-                capsize=4,
-                color="black",
-                elinewidth=1,
-            )
-
-        # Add horizontal line (y = 0)
-        plt.axhline(0, color="black", linewidth=1)
-            
-        plt.ylim(0, 100)
-        plt.ylabel("Percentage")
-        plt.xlabel(f"Amplicon : {amp}")
-        plt.axhline(0, color="black", linewidth=1)
-        plt.xticks(rotation=90, ha="center")
-        plt.legend(title="Context")
-
-        plt.tight_layout()
-
-        # Save to PDF (one file per amplicon)
-        pdf_path = dir_out_pth / f"{amp}_plot.pdf"
-        plt.savefig(pdf_path, format="pdf", bbox_inches="tight")
-
-        plt.close()  
-
-    return True
 
 
 
