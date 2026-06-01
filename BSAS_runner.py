@@ -14,7 +14,7 @@ from statsmodels.stats.proportion import proportion_confint
 import matplotlib
 import matplotlib.pyplot as plt
 
-
+from utils import write_log
 
 
 
