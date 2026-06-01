@@ -3,7 +3,6 @@ import os
 import sys
 import argparse
 import subprocess
-import utils
 import re
 from datetime import datetime
 from pathlib import Path
