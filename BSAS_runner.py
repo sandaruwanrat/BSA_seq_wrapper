@@ -368,7 +368,7 @@ master_file,
 filT : int,
 num_proc : int,
 siteCH : int,
-verbose = True):
+verbose ):
     print("starting .....")
     #print("date_time: {}".format(datestring))
     print("Reads directory: {}".format(dir_reads))
