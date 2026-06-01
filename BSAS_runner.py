@@ -361,7 +361,14 @@ def cal_cov_stats(fasta_file,name_sample,dir_ref_pth,dir_out_pth,fh_log,verbose=
 
 #### main ######
 
-def run_BSAS():
+def run_BSAS(dir_reads:Path,
+dir_ref : Path ,
+dir_out : Path,
+master_file,
+filT : int,
+num_proc : int,
+siteCH : int,
+verbose = True):
     print("starting .....")
     print("date_time: {}".format(datestring))
     print("Reads directory: {}".format(dir_reads))
