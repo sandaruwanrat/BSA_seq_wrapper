@@ -370,7 +370,7 @@ num_proc : int,
 siteCH : int,
 verbose = True):
     print("starting .....")
-    print("date_time: {}".format(datestring))
+    #print("date_time: {}".format(datestring))
     print("Reads directory: {}".format(dir_reads))
     print("Reference directory: {}".format(dir_ref))
     print("Output directory: {}".format(dir_out))
