@@ -580,14 +580,13 @@ def run_BSAS():
             sys.exit(1)
 
         
-        #should be change to a seperate option
-        #need to allow users to order the samples
-        #plotting
-        print("\tPlotting output matix results", file=fh_log)
-        if verbose:
-            print("\tPlotting output matix results", file=sys.stderr)
         
-        plot_amplicon(ref_dir=dir_ref_pth,dir_out_pth=dir_out_pth)
+        #plotting
+        # print("\tPlotting output matix results", file=fh_log)
+        # if verbose:
+        #     print("\tPlotting output matix results", file=sys.stderr)
+        
+        
         
         # Log completion
         completion_msg = "Analysis pipeline completed successfully!"
